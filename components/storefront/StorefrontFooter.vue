@@ -1,7 +1,7 @@
 <template>
-  <footer>
+  <footer v-if="site.footerText || supportContacts.length">
     <div class="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-      <p class="whitespace-pre-wrap">{{ site.footerText }}</p>
+      <p v-if="site.footerText" class="whitespace-pre-wrap">{{ site.footerText }}</p>
       <DropdownMenu v-if="supportContacts.length > 1">
         <DropdownMenuTrigger as-child>
           <Button type="button" variant="outline" size="sm">

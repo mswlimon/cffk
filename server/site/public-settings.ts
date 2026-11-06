@@ -24,8 +24,8 @@ type CacheEntry = {
 const CACHE_TTL_MS = 60_000;
 let settingsCache: CacheEntry | null = null;
 
-export const DEFAULT_FOOTER_TEXT = "© 2026 CFFK 基于 GitHub 开源";
-export const DEFAULT_SUPPORT_CONTACT = "TG互助群|https://t.me/edgeKeyGroup";
+export const DEFAULT_FOOTER_TEXT = "";
+export const DEFAULT_SUPPORT_CONTACT = "";
 
 const defaultSettings: SiteSettingRecord = {
   id: 1,
@@ -65,6 +65,20 @@ export function invalidateSiteSettings(_database?: D1Database) {
 }
 
 export function toPublicSiteSettings(record: SiteSettingRecord): PublicSiteSettings {
+  let footer = record.footerText?.trim() || null;
+  if (footer && (footer === "© 2026 CFFK 基于 GitHub 开源" || footer.includes("© 2026 CFFK 基于 GitHub 开源"))) {
+    footer = footer.replace("© 2026 CFFK 基于 GitHub 开源", "").trim() || null;
+  }
+
+  let support = record.supportContact?.trim() || null;
+  if (support) {
+    const lines = support
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => Boolean(line) && line !== "TG互助群|https://t.me/edgeKeyGroup");
+    support = lines.length ? lines.join("\n") : null;
+  }
+
   return {
     name: record.siteName,
     subtitle: record.siteSubtitle,
@@ -72,8 +86,8 @@ export function toPublicSiteSettings(record: SiteSettingRecord): PublicSiteSetti
     logo: record.logo,
     logoIcon: record.logoIcon || record.logo,
     notice: record.notice,
-    supportContact: record.supportContact?.trim() || DEFAULT_SUPPORT_CONTACT,
-    footerText: record.footerText?.trim() || DEFAULT_FOOTER_TEXT,
+    supportContact: support || (DEFAULT_SUPPORT_CONTACT || null),
+    footerText: footer || (DEFAULT_FOOTER_TEXT || null),
     orderNotice: record.orderNotice,
   };
 }
