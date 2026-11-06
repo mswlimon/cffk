@@ -54,13 +54,24 @@ export class PaymentFlowService {
   constructor(private readonly database: D1Database, private readonly runtime: Record<string, unknown> = {}) {}
 
   async create(input: PaymentCreateInput, ownerUserId: string | null): Promise<PaymentCreateResult> {
-    const definition = getProviderDefinition(input.paymentProvider);
-    if (!definition) appError("PAYMENT_PROVIDER_NOT_AVAILABLE");
-    const provider = await getEnabledPaymentProvider(this.database, input.paymentProvider);
-    if (!provider) appError("PAYMENT_PROVIDER_NOT_AVAILABLE");
-    const channel = input.paymentChannel ?? provider.channels[0];
-    if (provider.channels.length > 0 && (!channel || !provider.channels.includes(channel))) appError("PAYMENT_CHANNEL_INVALID");
-    const created = await createOrder(this.database, { ...input, paymentChannel: channel, allowPendingPayment: true } as CreateOrderInput, ownerUserId);
+    const provider = input.paymentProvider ? await getEnabledPaymentProvider(this.database, input.paymentProvider) : null;
+    const definition = input.paymentProvider ? getProviderDefinition(input.paymentProvider) : null;
+    const channel = input.paymentChannel ?? provider?.channels[0];
+    if (provider && provider.channels.length > 0 && (!channel || !provider.channels.includes(channel))) {
+      appError("PAYMENT_CHANNEL_INVALID");
+    }
+
+    const created = await createOrder(
+      this.database,
+      {
+        ...input,
+        paymentProvider: provider?.provider ?? input.paymentProvider ?? "ALIPAY",
+        paymentChannel: channel,
+        allowPendingPayment: true,
+      } as CreateOrderInput,
+      ownerUserId,
+    );
+
     const logs = new PaymentLogService(this.database);
     if (created.amount === 0) {
       try {
@@ -70,10 +81,17 @@ export class PaymentFlowService {
         }
         return { ...created, payment: null, paymentStatus: "PAID" };
       } catch (cause) {
-        await closePendingOrder(this.database, created.id).catch((closeCause) => reportUnexpectedServerError("payment-close-zero-order-failed", closeCause, { orderId: created.id, orderNo: created.orderNo }));
+        await closePendingOrder(this.database, created.id).catch((closeCause) =>
+          reportUnexpectedServerError("payment-close-zero-order-failed", closeCause, { orderId: created.id, orderNo: created.orderNo })
+        );
         throw cause;
       }
     }
+
+    if (!definition || !provider) {
+      appError("PAYMENT_PROVIDER_NOT_AVAILABLE");
+    }
+
     const repository = paymentRepository(this.database);
     const attemptId = await repository.createAttempt({ orderId: created.id, provider: provider.provider, channel });
     if (attemptId === null) {
@@ -117,6 +135,14 @@ export class PaymentFlowService {
       if (record.productSkuId === null) appError("PRODUCT_SKU_NOT_AVAILABLE");
       const [sku] = await db.select({ physicalStock: productSku.physicalStock }).from(productSku).where(eq(productSku.id, record.productSkuId)).limit(1);
       if (sku?.physicalStock !== null && (sku?.physicalStock ?? 0) < record.quantity) appError("PRODUCT_STOCK_NOT_ENOUGH");
+    }
+
+    if (record.amount === 0) {
+      const outcome = await this.confirm(record.orderNo, "ZERO_AMOUNT");
+      if (outcome !== "CONFIRMED" && outcome !== "ALREADY_PAID" && outcome !== "DELIVERY_PENDING") {
+        appError(outcome === "DELIVERY_FAILED" ? "SUPPLIER_PURCHASE_UNAVAILABLE" : "PAYMENT_CONFIRM_FAILED");
+      }
+      return { orderNo: record.orderNo, amount: record.amount, paymentStatus: "PAID", payment: null };
     }
 
     const provider = await getEnabledPaymentProvider(this.database, record.paymentProvider as PaymentProviderKind);
