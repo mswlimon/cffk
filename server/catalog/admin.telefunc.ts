@@ -232,7 +232,7 @@ async function internalOnSaveProduct(input: {
     if (sku.id !== undefined && (!Number.isInteger(sku.id) || sku.id < 1)) appError("PRODUCT_SKU_ID_INVALID");
     const name = requiredText(sku.name, "PRODUCT_SKU_NAME_REQUIRED", 120, "PRODUCT_SKU_NAME_TOO_LONG");
     const cents = parseAmountToCents(sku.price);
-    if (!cents || cents < 1) appError("PRODUCT_PRICE_INVALID");
+    if (cents === null || cents < 0) appError("PRODUCT_PRICE_INVALID");
     const minBuy = sku.deliveryType === "FIXED_CARD" ? 1 : nonNegativeInteger(sku.minBuy, "PRODUCT_BUY_RANGE_INVALID");
     const maxBuy = sku.deliveryType === "FIXED_CARD" ? 1 : nonNegativeInteger(sku.maxBuy, "PRODUCT_BUY_RANGE_INVALID");
     if (minBuy < 1 || maxBuy < minBuy) appError("PRODUCT_BUY_RANGE_INVALID");
@@ -342,7 +342,7 @@ async function internalOnSetProductStatus(input: { id: number; status: ProductSt
       : skus.filter((sku) => sku.status === "ACTIVE");
     if (!current.categoryId || !current.slug || !publishableSkus.length) appError("PRODUCT_PUBLISH_REJECTED");
     for (const sku of publishableSkus) {
-      if (sku.price < 1 || sku.minBuy < 1 || sku.maxBuy < sku.minBuy) appError("PRODUCT_PUBLISH_REJECTED");
+      if (sku.price < 0 || sku.minBuy < 1 || sku.maxBuy < sku.minBuy) appError("PRODUCT_PUBLISH_REJECTED");
       if (sku.fulfillmentSource === "SUPPLIER") {
         if (sku.deliveryType !== "SUPPLIER") appError("SUPPLIER_FULFILLMENT_INVALID");
         await assertSupplierSkuPublishable(db, sku.id);
@@ -396,7 +396,7 @@ async function internalOnSaveSupplierProductPresentation(input: {
   if (input.skus.length !== currentSkus.length || input.skus.some((sku) => !Number.isInteger(sku.id) || !currentSkus.some((currentSku) => currentSku.id === sku.id))) appError("SUPPLIER_SKU_EDIT_REJECTED");
   const normalizedSkus = input.skus.map((sku) => {
     const price = parseAmountToCents(sku.price);
-    if (!price || price < 1 || (sku.status !== "ACTIVE" && sku.status !== "INACTIVE")) appError("PRODUCT_INPUT_INVALID");
+    if (price === null || price < 0 || (sku.status !== "ACTIVE" && sku.status !== "INACTIVE")) appError("PRODUCT_INPUT_INVALID");
     return { id: sku.id, name: requiredText(sku.name, "PRODUCT_SKU_NAME_REQUIRED", 120, "PRODUCT_SKU_NAME_TOO_LONG"), price, status: sku.status, sort: nonNegativeInteger(sku.sort, "PRODUCT_SORT_INVALID") };
   });
   if (new Set(normalizedSkus.map((sku) => sku.name)).size !== normalizedSkus.length) appError("PRODUCT_SKU_NAME_CONFLICT");
@@ -437,7 +437,7 @@ async function internalOnSaveProductSku(input: { id?: number; productId: number;
   if (existingSkus.some((sku) => sku.id !== input.id && sku.deliveryType !== input.deliveryType)) appError("PRODUCT_SKU_DELIVERY_TYPE_CONFLICT");
   const name = requiredText(input.name, "PRODUCT_SKU_NAME_REQUIRED", 120, "PRODUCT_SKU_NAME_TOO_LONG");
   const price = parseAmountToCents(input.price);
-  if (!price || price < 1) appError("PRODUCT_PRICE_INVALID");
+  if (price === null || price < 0) appError("PRODUCT_PRICE_INVALID");
   const minBuy = input.deliveryType === "FIXED_CARD" ? 1 : nonNegativeInteger(input.minBuy, "PRODUCT_BUY_RANGE_INVALID");
   const maxBuy = input.deliveryType === "FIXED_CARD" ? 1 : nonNegativeInteger(input.maxBuy, "PRODUCT_BUY_RANGE_INVALID");
   if (minBuy < 1 || maxBuy < minBuy) appError("PRODUCT_BUY_RANGE_INVALID");
